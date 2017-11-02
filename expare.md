@@ -126,7 +126,7 @@ Location Nodes: ALL DATANODES
 ##### <div id="RemoteXACT">RemoteXACT manager</div>
  
 远端事务管理器，负责完成远端事务出现错误后的相关操作。
-负责记录与重做或回滚远端的两阶段事务.不会出现各个节点存在未完成的两阶段事务而导致的事务挂起。
+负责记录与重做或回滚远端的两阶段事务，不会出现各个节点存在未完成的两阶段事务而导致的事务挂起。
 
 
 ##### <div id="Remote">Remote xlog</div>
