@@ -20,7 +20,7 @@ Date:   Sat Aug 27 08:09:34 2016 -0500
 自定义分片函数|	不支持|	不支持|	支持	|支持	|[自定义分片函数](#1)
 Oracle语法兼容|	不支持|	不支持|	支持|	支持|	ADB新增Oralce语法兼容
 只读事务不获取事务号|	不支持|	支持|	不支持|	支持|	Pgxl和2.2版本均支持只读事务不获取事务号功能，减少不必要处理和性能损耗
-复制表union、in、exist、连接等进行优化，减少网络传输和计算|	无优化|	部分优化，MPP引擎是优势|	优化，不具备mpp执行引擎|	优化，不具备mpp执行引擎（3.1版本优化）|	[复制表union、in、exist、连接等进行优化](#union)
+复制表union、in、exist、连接等进行优化，减少网络传输和计算|无优化|部分优化，MPP引擎是优势|	优化，不具备mpp执行引擎|	优化，不具备mpp执行引擎（3.1版本优化）|	[复制表union、in、exist、连接等进行优化](#union)
 优化pool manager|	经常出现get pool failed且无具体原因	|未优化	|优化|	优化|	ADB优化重构pool
 Gtm 支持一主多从，同步异步模式|	不支持|	不支持|	不支持|	支持|	2.2版本重新编写了gtm，支持一主多重以及同步模式
 Gtm纳入事务	|不支持|	不支持|	不支持|	支持|	2.2版本将gtm所有处理纳入事务，保证全局的事务性
@@ -126,7 +126,7 @@ Location Nodes: ALL DATANODES
 ##### <div id="RemoteXACT">RemoteXACT manager</div>
  
 远端事务管理器，负责完成远端事务出现错误后的相关操作。
-负责记录与重做或回滚远端的两阶段事务.不会出现各个节点出现未完成的两阶段事务而导致的事务挂起。
+负责记录与重做或回滚远端的两阶段事务.不会出现各个节点存在未完成的两阶段事务而导致的事务挂起。
 
 
 ##### <div id="Remote">Remote xlog</div>
@@ -136,7 +136,7 @@ Location Nodes: ALL DATANODES
 在某些情况下会出现，某些节点与其他节点的表或者信息不一致的情况下，如果采用从coordinator进行删除或者修改肯定是失败，使用if exist 允许在某个节点上进行单独的操作。
 
 ##### <div id="manager">ADB Manager</div>
-ADB Manager集群管理工具，manager通过与部署数据库机器上各个agent通信，管理数据库集群的初始化、启动、停止、高可用切换、新增节点添加及参数设置；manager可以部署在非数据库集群机器上，避免用户直接登陆数据库机器从而增强安全性，限制指定特定语法规则的操作命令增强对用户行为约束性。通过维护host、node、parm表来管理集群节点信息，方便大规模集群节点管理及部署。 
+ADB Manager集群管理工具，manager通过与部署数据库机器上各个agent通信，管理数据库集群的初始化、启动、停止、高可用切换、节点的添加删除以及参数的查看设置；manager可以部署在非数据库集群机器上，避免用户直接登陆数据库机器从而增强安全性，限制指定特定语法规则的操作命令增强对用户行为约束性。通过维护host、node、parm表来管理集群节点信息，方便大规模集群节点管理及部署。 
 
 无需让所有节点都配置SSH，即可实现集群管理，更安全。
 ADB Manager架构方便扩展，有利于集成辅助功能。通过manager及部署的agent获取数据库集群监控信息，相关监控信息存储在manager端，实现monitor数据库监控功能。 
@@ -674,7 +674,7 @@ postgres=# end;
 --一直hang在那边，没有COMMIT的打印，发现这条语句其实是在往原master db1写数据
 ```
 
-##### <div id="6">oordinator与gtm_proxy不安装在一个节点服务器</div>
+##### <div id="6">coordinator与gtm_proxy不安装在一个节点服务器</div>
 pgxc pgxl
 coordinator与gtm_proxy不安装在一个节点服务器，init 时，coordinator 连接GTM信息保存的是gtm的，而不是gtm_proxy。
 failover gtm 后，现象一样。
