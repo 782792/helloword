@@ -19,8 +19,9 @@ Date:   Fri Oct 20 23:25:10 2017 +0800
 ```
 测试资源配置：
 
-操作系统|CentOS release 6.7（Linux version:2.6.32-642.6.1.el6.x86_64）
+类别|描述
 --|--
+操作系统|CentOS release 6.7（Linux version:2.6.32-642.6.1.el6.x86_64）
 CPU|Intel(R) Xeon(R) CPU E5-2609 v3 @ 1.90GHz 12核
 内存|64GB
 DISK|1.6T SCSI
@@ -37,7 +38,7 @@ Oracle语法兼容|	不支持|	不支持|	支持|	支持|	[ADB新增Oralce语法
 只读事务不获取事务号|	不支持|	支持|	不支持|	支持|	[只读事务不获取事务号](#read)
 复制表union、in、exists、连接等进行优化，减少网络传输和计算|	无优化|	部分优化|优化|优化|	[复制表union、in、exists、连接等进行优化](#union)
 优化pool manager|	经常出现get pool failed	|未优化	|优化|	优化|	ADB优化重构pool
-Gtm 支持一主多从，同步异步模式|	不支持|	不支持|	不支持|	支持|	2.2版本重构了gtm，支持一主多重
+Gtm 支持一主多从，同步异步模式|	不支持|	不支持|	不支持|	支持|	2.2版本重构了gtm，支持一主多从
 Gtm纳入事务	|不支持|	不支持|	不支持|	支持|	2.2版本gtm参与事务处理，保证全局事务
 RemoteXACT辅助进程	|不支持	|不支持|	不支持|	支持|	[RemoteXACT manager](#RemoteXACT)
 Remote xlog|	不支持|	不支持|	不支持|	支持|	[Remote xlog](#Remote)
@@ -55,7 +56,6 @@ Failover gtm对原mater进程清理预防错误|	不支持|	不支持|	支持|	�
 问题描述|	Pgxc|	Pgxl|	ADBV2.1|	ADBV2.2|链接
 --|--|--|--|--|--
 coordinator和datanode中事务状态不一致|	有|	有|	无|	无|	[coordinator和datanode中事务状态不一致](#2)
-|	数据一致性验证|	一主两从场景偶现不一致|	高并发压测场景报错|	一致|	一致|	[数据一致性](#cons)
 gtm一主一从，先failover gtm , add slave后再次切换|	偶现coredump|	gtm高可用存在缺陷(参考高可用切换)	|正常|	正常|	[Gtm 高可用](#failover)
  |[1000并发](#1000)，datanode切换，coordinator会卡顿一段时间，之后恢复正常。|	无|	切换完成，可以正常读写但有core文件产生|	无|	无	|[benchmarksql1000并发下datanode切换](#core)
  |	新增GTM_STANDBY时，只要有活跃事务，切换后这些活跃事务不释放。导致commit那些活跃事务虽然成功，但select报错|	无|	gtm高可用存在缺陷|	无|	无|	[新增gtm_standby,进行gtm高可用切换后commit成功select报错](#comm)
@@ -137,8 +137,9 @@ Distribute By: fun_519_11(id, v3)
 Location Nodes: ALL DATANODES
 ```
 ##### <div id="oracle">oracle语法及函数兼容</div>
-ADB(支持会话级，server级,语句级显式调用):
+ADB(支持会话级,语句级显式调用，全局server级（通过修改配置文件postgresql.conf grammar=oracle）):
 ```sql
+--会话级
 postgres=# set grammar = oracle;
 SET
 postgres=# select sysdate from dual;
@@ -155,6 +156,7 @@ postgres=# /*pg*/select now();
 
 postgres=# set grammar=postgres;
 SET
+--语句级
 postgres=# /*ora*/ select sysdate from dual;
      ora_sys_now     
 ---------------------
@@ -529,9 +531,25 @@ psql:FATAL:Could not obtain a transaction ID from GTM.The GTM might have failed 
 ##### <div id="core">benchmarksql 1000并发下datanode切换</div>
 pgxl
 
-![产生core文件]()
-
-
+```shell
+(gdb) bt
+#0   0x00000000006ca2b2 in producerDestroyReceiver (self-0x289d038) at producerReceiver.c:153
+#1   0x000000000086b7ce in cleanipClosedProducers () at pquery.c:2496
+#2   0x0000000000866589 in PostgresMain (argc=1, argv=0x253ee68, dbname=0x253ed60 "postgres", username=0x253ed38 "benchmarksql") at postgres.c:4576
+#3   0x00000000007e1f97 in BackendRun (port=0x25a6000) at postmaster.c:4477
+#4   0x00000000007e1702 in BackendStartup (port=0x25a6000) at postmaster.c:4151
+#5   0x00000000007dda9f in ServerLoop () at postmaster.c:1801
+#6   0x00000000007dd163 in PostmasterMain (argc=3, argv=0x2530140) at postmaster.c:1409
+#7   0x000000000070fabe in main (argc=3, argv=0x2530140) at main.c:228
+(gdb) p mystate
+$1 = (producerstate *) 0x289d038
+(gdb) p mystate->consumer
+$2 = (DestReceiver *) 0x2871358
+(gdb) p *mystate->consumer->rDestory
+Cannot access memory at address 0x7f7f7f7f7f7f7f7f
+(gdb) p isPGXCDataNode
+$3 = 1 '\001'
+```
 ##### <div id="comm">新增gtm_standby,进行gtm高可用切换后commit成功select报错</div>
 
 分别在coord1 psql窗口，分别执行下面的事务模拟状态
