@@ -34,7 +34,7 @@ DISK|1.6T SCSI
 --|--|--|--|--|--
 自定义分片函数|	不支持|	不支持|	支持	|支持	|[自定义分片函数](#1)
 Oracle语法兼容|	不支持|	不支持|	支持|	支持|	[ADB新增Oralce语法兼容](#oracle)
-只读事务不获取事务号|	不支持|	支持|	不支持|	支持|	Pgxl和2.2版本均支持只读事务不获取事务号功能，减少不必要处理和性能损耗
+只读事务不获取事务号|	不支持|	支持|	不支持|	支持|	[只读事务不获取事务号](#read)
 复制表union、in、exists、连接等进行优化，减少网络传输和计算|	无优化|	部分优化|优化|优化|	[复制表union、in、exists、连接等进行优化](#union)
 优化pool manager|	经常出现get pool failed	|未优化	|优化|	优化|	ADB优化重构pool
 Gtm 支持一主多从，同步异步模式|	不支持|	不支持|	不支持|	支持|	2.2版本重构了gtm，支持一主多重
@@ -161,7 +161,49 @@ postgres=# /*ora*/ select sysdate from dual;
  2017-11-03 16:35:12
 (1 row)
 ```
+##### <div id="read">只读事务不获取事务号</div>
+pgxc和adb2.1版本，事务查询需要获取事务号。
+```sql
+postgres=# select txid_current_snapshot();
+ txid_current_snapshot 
+-----------------------
+ 2315:2315:
+(1 row)
 
+postgres=# select count(*) from a;
+ count 
+-------
+     0
+(1 row)
+
+postgres=# select txid_current_snapshot();
+ txid_current_snapshot 
+-----------------------
+ 2317:2317:
+(1 row)
+```
+Pgxl和2.2版本均支持只读事务不获取事务号功能，减少不必要处理和性能损耗:
+```sql
+postgres=# create table a (id int);
+CREATE TABLE
+postgres=# select txid_current_snapshot();
+ txid_current_snapshot 
+-----------------------
+ 3648155:3648155:
+(1 row)
+
+postgres=# select count(*) from a;
+ count 
+-------
+     0
+(1 row)
+
+postgres=# select txid_current_snapshot();
+ txid_current_snapshot 
+-----------------------
+ 3648155:3648155:
+(1 row)
+```
 ##### <div id="RemoteXACT">RemoteXACT manager</div>
  
 远端事务管理器，负责完成远端事务出现错误后的相关操作。
