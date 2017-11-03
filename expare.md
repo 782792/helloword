@@ -1,5 +1,6 @@
-# xc-xl-adb2.1-adb2.2版本对比
+# xc-xl-adb2.1-adb2.2功能对比
 版本说明：
+（选取xc及adb版本基于pg9.3内核版本，xl基于pg9.5内核）
 ```shell
 pgxl版本：
 commit b899b6c0126b54c698caa9ee99b428a25d360a6c
@@ -10,7 +11,21 @@ pgxc版本：
 commit efffd41798e1c80f15940f00b08a61fcf346333b
 Author: Koichi Suzuki <koichi.dbms@gmail.com>
 Date:   Sat Aug 27 08:09:34 2016 -0500
+
+adb2.2版本：
+commit 8014f7e876acc5d25624abfc1ef02de5a978f4cd
+Author: ZhaoCheng <chengxiaozh@gmail.com>
+Date:   Fri Oct 20 23:25:10 2017 +0800
 ```
+测试资源配置：
+
+操作系统|CentOS release 6.7（Linux version:2.6.32-642.6.1.el6.x86_64）
+--|--
+CPU|Intel(R) Xeon(R) CPU E5-2609 v3 @ 1.90GHz 12核
+内存|64GB
+DISK|1.6T SCSI
+网卡|1000Gb
+
 ### 1、版本功能对比
 ---
 #### 1.1、新增功能对比
@@ -18,40 +33,38 @@ Date:   Sat Aug 27 08:09:34 2016 -0500
 功能 |Pgxc	|Pgxl	|ADBV2.1	|ADBV2.2	|链接和说明
 --|--|--|--|--|--
 自定义分片函数|	不支持|	不支持|	支持	|支持	|[自定义分片函数](#1)
-Oracle语法兼容|	不支持|	不支持|	支持|	支持|	ADB新增Oralce语法兼容
+Oracle语法兼容|	不支持|	不支持|	支持|	支持|	[ADB新增Oralce语法兼容](#oracle)
 只读事务不获取事务号|	不支持|	支持|	不支持|	支持|	Pgxl和2.2版本均支持只读事务不获取事务号功能，减少不必要处理和性能损耗
-复制表union、in、exist、连接等进行优化，减少网络传输和计算|无优化|部分优化，MPP引擎是优势|	优化，不具备mpp执行引擎|	优化，不具备mpp执行引擎（3.1版本优化）|	[复制表union、in、exist、连接等进行优化](#union)
-优化pool manager|	经常出现get pool failed且无具体原因	|未优化	|优化|	优化|	ADB优化重构pool
-Gtm 支持一主多从，同步异步模式|	不支持|	不支持|	不支持|	支持|	2.2版本重新编写了gtm，支持一主多重以及同步模式
-Gtm纳入事务	|不支持|	不支持|	不支持|	支持|	2.2版本将gtm所有处理纳入事务，保证全局的事务性
+复制表union、in、exists、连接等进行优化，减少网络传输和计算|	无优化|	部分优化|优化|优化|	[复制表union、in、exists、连接等进行优化](#union)
+优化pool manager|	经常出现get pool failed	|未优化	|优化|	优化|	ADB优化重构pool
+Gtm 支持一主多从，同步异步模式|	不支持|	不支持|	不支持|	支持|	2.2版本重构了gtm，支持一主多重
+Gtm纳入事务	|不支持|	不支持|	不支持|	支持|	2.2版本gtm参与事务处理，保证全局事务
 RemoteXACT辅助进程	|不支持	|不支持|	不支持|	支持|	[RemoteXACT manager](#RemoteXACT)
 Remote xlog|	不支持|	不支持|	不支持|	支持|	[Remote xlog](#Remote)
-If exist 语法|	不支持|	不支持|	支持|	支持|	[If exist](#exist)
-Manager集群管理工具	|无|	无	|无	|有	| [ADB Manager](#manager)
+Manager	|无|无	|无	|有	| [ADB Manager](#manager)
 Monitor	|无	|无	|有|	有|	[ADB monitor](#monitor)
 
 #### 1.2、其他功能对比
 功能|	Pgxc|	Pgxl|	ADBV2.1|	ADBV2.2|	链接和说明
 --|--|--|--|--|--
-Gtm 高可用|	支持|	gtm高可用有缺陷基本无效	|支持|	支持|	[Gtm高可用](#hive)
-Failover gtm对原有进程进行清理预防错误|	不支持|	不支持|	支持|	支持|	[Failover gtm](#failover)
-高并发操作sequence,出现gtm.control中sequence丢失，而c节点和D节点中存在|	有|	有|	可修正|	无|	[sequence丢失](#seq)
+Gtm 高可用|	支持|	存在缺陷	|支持|	支持|	[Gtm高可用](#hive)
+Failover gtm对原mater进程清理预防错误|	不支持|	不支持|	支持|	支持|	[Failover gtm](#failover)
+高并发操作sequence,出现gtm.control中sequence存在，而coordinator节点和datanode节点中丢失|	有|	有|	可修正|	无|	[sequence丢失](#seq)
 
-#### 1.3、严重缺陷对比
-类别|	问题单号|	问题描述|	Pgxc|	Pgxl|	ADBV2.1|	ADBV2.2|链接
---|--|--|--|--|--|--|--
-一致性	|17353|	1000并发,coordinator和datanode中事务状态不一致|	有|	有|	无|	无|	[coordinator和datanode中事务状态不一致](#2)
-| |	|	数据一致性验证|	极端情况存在不一致(一主多从)|	高并发压测场景报错|	一致|	一致|	数据一致性
-高可用	| |	1000并发时 failover gtm , add slave后继续切换|	偶现coredump|	gtm高可用有缺陷基本无效(参考高可用切换)	|正常|	正常|	[Gtm 高可用](#failover)
- |	|20468|	benchmarksql1000并发下，datanode切换，coordinator会卡顿一段时间，之后恢复正常。|	无|	切换完成，可以正常读写但有core文件产生|	无|	无	|[benchmarksql1000并发下datanode切换](#core)
- |	|13217|	新增GTM_STANDBY时，只要有活跃事务，切换后这些活跃事务不释放。导致commit那些活跃事务虽然成功，但是select报错|	无|	gtm高可用有缺陷基本无效|	无|	无|	[新增gtm_standby,进行gtm高可用切换后commit成功select报错](#comm)
- | | |Datanode failover后写数据失败|	有|	无|	无|	无|	[Datanode failover后写数据失败](#faildb)
- |	|11434|	coordinator与gtm_proxy不安装在一个节点服务器，pgxc_ctl failover gtm后，该coordinator连接gtm的ip port未修改为gtm_proxy|	有|	有|	无|	无|	[coordinator与gtm_proxy不安装在一个节点服务器](#6)
-其他|	16798|	创建临时table后，往这个临时表中插入数据或者创建函数中使用这个表，都会报：这个临时表不存在或者类型未定义|	产生core文件|	有|	无	|无|	[ERROR:  type compos does not exist](#type)
- |	|13726|	psql会话中设置事务隔离级别造成gtm_proxy发送消息混乱	|有	|无	|无|	无|	[会话中设置事务隔离级别造成消息混乱](#tru)
- | | |表属性丢失|	无	|验证经常发生死锁无法进行|	无|	无|	[属性丢失](#4)
- | | |	Pgxc_ctl 反应过慢|	无|	有|	无|	无|	[pgxc_ctl 反应时间过长](#ctl)
- | | |	Gtm重要信息保护	|无|	无|	有|	有|	[Gtm信息保护](#safe)
+#### 1.3、异常场景对比
+问题描述|	Pgxc|	Pgxl|	ADBV2.1|	ADBV2.2|链接
+--|--|--|--|--|--
+coordinator和datanode中事务状态不一致|	有|	有|	无|	无|	[coordinator和datanode中事务状态不一致](#2)
+|	数据一致性验证|	一主两从场景偶现不一致|	高并发压测场景报错|	一致|	一致|	[数据一致性](#cons)
+gtm一主一从，先failover gtm , add slave后再次切换|	偶现coredump|	gtm高可用存在缺陷(参考高可用切换)	|正常|	正常|	[Gtm 高可用](#failover)
+ |[1000并发](#1000)，datanode切换，coordinator会卡顿一段时间，之后恢复正常。|	无|	切换完成，可以正常读写但有core文件产生|	无|	无	|[benchmarksql1000并发下datanode切换](#core)
+ |	新增GTM_STANDBY时，只要有活跃事务，切换后这些活跃事务不释放。导致commit那些活跃事务虽然成功，但select报错|	无|	gtm高可用存在缺陷|	无|	无|	[新增gtm_standby,进行gtm高可用切换后commit成功select报错](#comm)
+ |Datanode failover后写数据失败|	有|	无|	无|	无|	[Datanode failover后写数据失败](#faildb)
+ |	coordinator与gtm_proxy不安装在一个节点服务器，pgxc_ctl failover gtm后，该coordinator连接gtm的ip port未修改为gtm_proxy|	有|	有|	无|	无|	[coordinator与gtm_proxy不安装在一个节点服务器](#6)
+创建临时表后，向临时表中插入数据或者创建函数中使用这个表，都会报：这个临时表不存在或者类型未定义|	产生core文件|	有|	无	|无|	[ERROR:  type compos does not exist](#type)
+ |	psql会话中设置事务隔离级别造成gtm_proxy发送消息混乱	|有	|无	|无|	无|	[会话中设置事务隔离级别造成消息混乱](#tru)
+  |表属性丢失|	无	|验证经常发生死锁无法进行|	无|	无|	[属性丢失](#4)
+ |	Gtm重要信息保护	|无|	无|	有|	有|	[Gtm信息保护](#safe)
  
  
  
@@ -123,26 +136,50 @@ Has OIDs: no
 Distribute By: fun_519_11(id, v3)
 Location Nodes: ALL DATANODES
 ```
+##### <div id="oracle">oracle语法及函数兼容</div>
+ADB(支持会话级，server级,语句级显式调用):
+```sql
+postgres=# set grammar = oracle;
+SET
+postgres=# select sysdate from dual;
+     ora_sys_now     
+---------------------
+ 2017-11-03 16:31:26
+(1 row)
+                      
+postgres=# /*pg*/select now();
+              now              
+-------------------------------
+ 2017-11-03 16:32:17.173877+08
+(1 row)
+
+postgres=# set grammar=postgres;
+SET
+postgres=# /*ora*/ select sysdate from dual;
+     ora_sys_now     
+---------------------
+ 2017-11-03 16:35:12
+(1 row)
+```
+
 ##### <div id="RemoteXACT">RemoteXACT manager</div>
  
 远端事务管理器，负责完成远端事务出现错误后的相关操作。
-负责记录与重做或回滚远端的两阶段事务，不会出现各个节点存在未完成的两阶段事务而导致的事务挂起。
+负责记录与重做或回滚远端的两阶段事务.不会出现各个节点存在未完成的两阶段事务而导致的事务挂起。
 
 
 ##### <div id="Remote">Remote xlog</div>
-在coordinator记录了远端的执行日志(事务号、节点号操作等信息)，可以确定哪些节点完成了哪些操作(prepare 、commit prepared 、roolback prepared)，再出现问题时可以进行相应处理。
+coordinator中记录了远端的执行日志(事务号、节点号操作等信息)，可以确定哪些节点完成了哪些操作(prepare 、commit prepared 、roolback prepared)，出现问题时可以进行相应处理。
 
-##### <div id="exist">If exist</div>
-在某些情况下会出现，某些节点与其他节点的表或者信息不一致的情况下，如果采用从coordinator进行删除或者修改肯定是失败，使用if exist 允许在某个节点上进行单独的操作。
 
 ##### <div id="manager">ADB Manager</div>
-ADB Manager集群管理工具，manager通过与部署数据库机器上各个agent通信，管理数据库集群的初始化、启动、停止、高可用切换、节点的添加删除以及参数的查看设置；manager可以部署在非数据库集群机器上，避免用户直接登陆数据库机器从而增强安全性，限制指定特定语法规则的操作命令增强对用户行为约束性。通过维护host、node、parm表来管理集群节点信息，方便大规模集群节点管理及部署。 
+ADB Manager集群管理工具，manager通过与部署数据库机器上各个agent通信，管理数据库集群的初始化、启动、停止、高可用切换、新增节点及参数设置；manager可以部署在非数据库集群机器上，避免用户直接登陆数据库机器从而增强安全性，限制指定特定语法规则的操作命令增强对用户行为约束性。通过维护host、node、parm表来管理集群节点信息，方便大规模集群节点管理及部署。 
 
 无需让所有节点都配置SSH，即可实现集群管理，更安全。
-ADB Manager架构方便扩展，有利于集成辅助功能。通过manager及部署的agent获取数据库集群监控信息，相关监控信息存储在manager端，实现monitor数据库监控功能。 
+ADB Manager架构方便扩展，有利于集成辅助功能。通过manager及部署的agent获取数据库集群监控信息，相关监控信息存储在manager端，实现monitor集群监控功能。 
 
 ##### <div id="monitor">ADB monitor</div>
-ADB monitor实现对数据库部署机器cpu、io、网络、内存及数据库结群节点数据量、tps、qps、缓存命中率、提交回滚率、连接数、锁等待数、长事务、空闲事务、prepare两阶段事务、慢日志、主机参数阈值告警、数据库参数阈值告警功能。 
+ADB monitor实现对数据库部署机器cpu、io、网络、内存及数据库集群节点数据量、tps、qps、缓存命中率、提交回滚率、连接数、锁等待数、长事务、空闲事务、prepare两阶段事务、慢日志、主机参数阈值告警、数据库参数阈值告警功能。 
 
 ##### <div id="2">coordinator和datanode中事务状态不一致</div>
 
@@ -252,21 +289,54 @@ CREATE FUNCTION
 
 ##### <div id="seq">sequence丢失</div>
 pgxc  pgxl
+
+创建sql脚本,vim seq.sql内容如下：
 ```sql
-postgres=# create sequence  seq_1 increment by 1 minvalue 1 no maxvalue start with 1;
-CREATE SEQUENCE
+create sequence  seq_1 increment by 1 minvalue 1 no maxvalue start with 1;
+select nextval('seq_1');
+select currval('seq_1');
+drop sequence seq_1;
+create sequence  seq_1 increment by 1 minvalue 1 no maxvalue start with 1;
+select nextval('seq_1');
+drop sequence seq_1;
 ```
-高并发下对这个sequence进行删除 、创建、查找会出现下面这种问题
-```sql 
+用pg自带的pgbench对上面的脚本进行100并发1分钟，结果：
+```shell
+pgxc@localhost1:~$pgbench  -c 100 -j 100 -n -T 180 -d postgres -U pgxc -p 8032 -f ./seq.sql 
+query mode: simple
+number of clients: 100
+number of threads: 100
+duration: 60 s
+number of transactions actually processed: 355
+tps = 5.903082 (including connections establishing)
+tps = 5.904042 (excluding connections establishing)
+
+```
+连接coordinator:
+```sql
+pgxc@localhost1:~/pgxc_data/gtm$psql -d postgres -U pgxc -p 8032
+psql (PGXC 1.2devel, based on PG 9.3.10)
+Type "help" for help.
+
 postgres=# \ds
-                          List of relations
- Schema |                  Name                   |   Type   | Owner 
- --------+----------------------------------------+----------+------
- public | seq_1                                   | sequence | pgxl
-(1 row)
-postgres=# drop sequence seq_1 ;
-ERROR:GTM error,could not drop sequence
+No relations found.
 ```
+此时，gtm的控制文件中存在该seq的信息：
+```shell
+pgxc@localhost1:~/pgxc_data/gtm$vim gtm.control 
+22483
+postgres.public.seq_1\00        2001    1       1       1       9223372036854775806     f       f       1
+```
+再开启一个coordinator连接会话，创建sequence出错：
+```sql
+pgxc@localhost1:~$psql -d postgres -U pgxc -p 8032        
+psql (PGXC 1.2devel, based on PG 9.3.10)
+Type "help" for help.
+postgres=# create sequence  seq_1 increment by 1 minvalue 1 no maxvalue start with 1;
+ERROR:  GTM error, could not create sequence
+
+```
+备注：还会偶现，gtm 中sequence信息不存在，而在coordinator节点和datanode节点中存在的现象，本次实验中就不再详细描述。
 ##### <div id="safe">Gtm信息保护</div>
 pgxc pgxl:
 ```shell 
@@ -303,7 +373,7 @@ drwxrwxr-x 7 autoci autoci    4096 Oct  9 09:51 ..
 ```
 ADBV2.2:
 
-v2.2版本为了解决xc xl 不参与2PC事务及序列的架构带来的业务场景问题，重构了全局事务管理器（AGTM）模块。
+v2.2版本为了解决xc xl的gtm 不参与2PC事务架构带来的业务场景问题，重构了全局事务管理器（AGTM）模块。
 
 
 ##### <div id="tru">会话中设置事务隔离级别造成消息混乱</div>
@@ -341,7 +411,7 @@ postgres=# \d cursor
 
 ##### <div id="failover">Failover gtm</div>
 Pgxl  pgxc
-Failover gtm后原有gtm  master进程仍然存在,如果进程能够接受请求可能发生不可预知的错误。
+Failover gtm后原有gtm  master进程仍然存在,此时进程能够正常接受请求，可能发生不可预知的错误。
 ```shell
 [pgxl@localhost1 gtm]$ ps xft | grep gtm
  9517 pts/1    S+     0:00                  \_ grep gtm
@@ -407,7 +477,12 @@ gtm_connect_retry_interval = 1
 [pgxl@localhost1 pxy1]$ psql -U zcxl -d postgres -p 12211
 psql:FATAL:Could not obtain a transaction ID from GTM.The GTM might have failed or lost connectivity.
 ```
-
+##### <div id="1000">1000 并发场景说明</div>
+压测工具|benchmarksql
+--|--
+数据量|100个数据仓库，9张表，最小的表8.5KB，最大的表3.2GB。表最小100行，最大4千万行
+集群架构|均采用2个coordinator，2个datanode master(datanode一主两从)
+硬件配置|CPU：Intel(R) Xeon(R) CPU E5-2609 v3 @ 1.90GHz 12核<br>MEM:64GB<br>DISK:1.6T SCSI
 
 ##### <div id="core">benchmarksql 1000并发下datanode切换</div>
 pgxl
@@ -678,15 +753,6 @@ postgres=# end;
 pgxc pgxl
 coordinator与gtm_proxy不安装在一个节点服务器，init 时，coordinator 连接GTM信息保存的是gtm的，而不是gtm_proxy。
 failover gtm 后，现象一样。
-
-
-##### <div id="ctl">pgxc_ctl 反应时间过长</div>
-Pgxl
-```shell
-1.stop gtm all
-2.monitor all
-```
-响应时间比较长
 
 
 ##### <div id="4">属性丢失</div>
