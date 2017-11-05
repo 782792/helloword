@@ -58,7 +58,6 @@ Failover gtm对原mater进程清理预防错误|	不支持|	不支持|	支持|	�
 coordinator和datanode中事务状态不一致|	有|	有|	无|	无|	[coordinator和datanode中事务状态不一致](#2)
 gtm一主一从，先failover gtm , add slave后再次切换|	偶现coredump|	gtm高可用存在缺陷(参考高可用切换)	|正常|	正常|	[Gtm 高可用](#failover)
  |[1000并发](#1000)，datanode切换，coordinator会卡顿一段时间，之后恢复正常。|	无|	切换完成，可以正常读写但有core文件产生|	无|	无	|[benchmarksql1000并发下datanode切换](#core)
- |	新增GTM_STANDBY时，只要有活跃事务，切换后这些活跃事务不释放。导致commit那些活跃事务虽然成功，但select报错|	无|	gtm高可用存在缺陷|	无|	无|	[新增gtm_standby,进行gtm高可用切换后commit成功select报错](#comm)
  |Datanode failover后写数据失败|	有|	无|	无|	无|	[Datanode failover后写数据失败](#faildb)
  |	coordinator与gtm_proxy不安装在一个节点服务器，pgxc_ctl failover gtm后，该coordinator连接gtm的ip port未修改为gtm_proxy|	有|	有|	无|	无|	[coordinator与gtm_proxy不安装在一个节点服务器](#6)
 创建临时表后，向临时表中插入数据或者创建函数中使用这个表，都会报：这个临时表不存在或者类型未定义|	产生core文件|	有|	无	|无|	[ERROR:  type compos does not exist](#type)
@@ -550,56 +549,6 @@ Cannot access memory at address 0x7f7f7f7f7f7f7f7f
 (gdb) p isPGXCDataNode
 $3 = 1 '\001'
 ```
-##### <div id="comm">新增gtm_standby,进行gtm高可用切换后commit成功select报错</div>
-
-分别在coord1 psql窗口，分别执行下面的事务模拟状态
-
-在c1的psql session1执行：
-```sql
-postgres=# begin;
-BEGIN
-```
-在c1的psql session2执行：
-```sql
-postgres=# begin;
-BEGIN
-postgres=# insert into t values(1),(2),(3),(4),(5),(6);
-INSERT 0 6
-```
-新增GTM_standby节点
-```shell
-PGXC add gtm slave gtm cos03 6666 /data/pgxc_data/gtm
-
-PGXC show config gtm
-GTM Master: host: cos04
-Nodename: 'gtm', port: 6666, dir: '/data/pgxc_data/gtm' ExtraConfig: 'gtmExtraConfig', Specific Extra Config: 'none'
-GTM Slave: host: cos03
-Nodename: 'gtm', port: 6666, dir: '/data/pgxc_data/gtm' ExtraConfig: 'gtmExtraConfig', Specific Extra Config: 'none'
-
---切换GTM
-PGXC failover gtm
-```
-进行事务提交操作
-```sql
---c1的psql session1
-postgres=# begin;
-BEGIN
-postgres=# insert into t values(9),(10);
-ERROR: GTM error, could not obtain snapshot XID = 2010
-postgres=# end;
-ROLLBACK
---c1的psql session2
-postgres=# begin;
-BEGIN
-postgres=# insert into t values(1),(2),(3),(4),(5),(6);
-INSERT 0 6
-postgres=# end;
-COMMIT
-postgres=# select * from t;
-```
-
-
-
 
 ##### <div id="union">复制表union、in、exist、连接等进行优化</div>
 ###### Union 语句
