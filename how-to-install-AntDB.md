@@ -1,6 +1,6 @@
-# 快速安装Antdb
+# 快速安装AntDB
 
-Antdb（为了方便后续都简称为ADB）集群，有单独的一个管理模块（ADB manger）来管理，监控和维护。详细信息可以参考《ADB集群管理工具(ADB manager)使用手册.md》。下面就简单介绍下如何通过ADB manager快速部署ADB 集群。
+AntDB（为了方便后续都简称为ADB）集群，有单独的一个管理模块（ADB manger）来管理，监控和维护。详细信息可以参考《ADB集群管理工具(ADB manager)使用手册.md》。下面就简单介绍下如何通过ADB manager快速部署ADB 集群。
 ## 第一章 初始化ADB manger
 
 ### 1.1 源码安装ADB manager
@@ -23,22 +23,25 @@ yum install -y python-devel
 yum install -y gcc-c++ 
 yum install -y libssh2-devel
 ```
-通过github 获取源码：
 
+通过github 获取源码：
 - git clone https://github.com/ADBSQL/AntDB 
 
 接着就可以进行编译安装步骤：
 
-- step 1: mkdir buildsrc
-- step 2: cd buildsrc
-- step 3: ../Antdb/configure ==--prefix=/opt/adbsql== --with-perl --with-python --with-openssl --with-pam --with-ldap --with-libxml --with-libxslt --enable-thread-safety --enable-debug --enable-cassert CFLAGS="-DWAL_DEBUG -O2 -ggdb3"
-
+- step 1: mkdir build
+- step 2: cd build
+- step 3: ../Antdb/configure --prefix=/opt/adbsql --with-perl --with-python --with-openssl --with-pam --with-ldap --with-libxml --with-libxslt --enable-thread-safety --enable-debug --enable-cassert CFLAGS="-DWAL_DEBUG -O2 -ggdb3"
 - step 4: make install-world-contrib-recurse
 
 **注:**
 > step 1步骤中，由于用同一份代码生成了mgr,agtm，所以需要在源码的同级目录下单独创建build编译目录；
 >
 > step 2步骤中，--prefix目录为准备安装的目录，可以根据需求灵活设置。
+
+如果需要使用平滑扩容版本，需要打开编译参数enable-expansion，其余步骤相同。即：
+- step 3:../Antdb/configure --prefix=/opt/adbsql --with-perl --with-python --with-openssl --with-pam --with-ldap --with-libxml --with-libxslt --enable-thread-safety --enable-debug --enable-cassert --enable-expansion
+
 ### 1.2 RPM安装 ADB manager
 ---
 通过交付人员提供的rpm包来安装（root用户执行）：
@@ -111,7 +114,9 @@ add host localhost3(port=22,protocol='ssh',adbhome='/opt/adbsql',address="10.1.2
 ---
 deploy命令会将ADB的二进制执行文件打包发送到host表中所有主机上。对于第一次部署集群，或者集群的安装包有更新，为了集群安装的稳定性，则应首先手动清空集群下所有主机的执行文件。
 在集群内各主机之间如果没有设置互信的情况下，执行deploy all需要输入用户密码（当前用户的登录密码），如果设置主机间互信，则可以省去密码的繁琐设置。
+
 **命令：**
+
 一次部署所有主机|	deploy all password 'adb';
 ---|---
 **部署指定的主机**	|**deploy localhost1,localhost2 password 'adb';**
@@ -120,7 +125,7 @@ deploy命令会将ADB的二进制执行文件打包发送到host表中所有主�
 ---
 有两种方式：一次启动全部agent和单独启动一台主机agent（多个主机需要多次执行）。
 
-==注意：password是host表中主机user对应的linux系统密码，用于与主机通信，而非ADB的用户密码。==
+注意：password是host表中主机user对应的linux系统密码，用于与主机通信，而非ADB的用户密码。
 当密码是以数字开头时，需要加上单引号或者双引号，例如password ‘12345z’是正确的，password 12345z则会报错；如果密码不是以数字开头，则加不加引号都行。
 
 一次启动全部agent|	start agent all  password 'adb';
@@ -142,6 +147,7 @@ Node表中添加gtm、coordinator、datanode master、datanode slave等节点信
 注意：host名称必须来自host表，端口号不要冲突，path指定的文件夹下必须为空，否则初始化将失败并报错。这种设置，是防止用户操作时，忘记当前节点下还有有用的数据信息。
 
 **添加命令：**
+
 add节点 | command
 ---|---
 添加coordinator信息|add coordinator 名字(path = 'xxx', host='localhost1', port=xxx);
@@ -231,4 +237,44 @@ postgres=# monitor all ;
  gtm      | gtm slave       | t      | running     | 10.1.226.202 |  6655
 (6 rows)
 ```
-**至此，ADB集群初始化完成！**
+
+**如果不使用平滑扩容特性，则到此可以开始使用ADB集群~若使用，对应1.1章节编译时需要打开编译开关，进行2.7章节的平滑扩容版本配置。**
+### 2.7 平滑扩容版本初始化
+Antdb采用hash+map路由算法实现：将集群的数据划分为1024个slot,对分片字段hash后，除1024取模，得到一个对应的slotid；数据路由时，通过slotid从映射表中找到对应的node节点。
+
+> （1）连接mgr，初始化pgxcnode和adb_slot表
+```sql
+cluster pgxcnode init;
+cluster meta init;
+```
+> （2）连接mgr，初始化slot信息（slot分布）
+```shell
+设置slotid与节点的对应关系。
+语法:cluster slot init (node='节点名', s节点名=开始slot位置, e节点名=结束slot位置)
+例2个节点，每个节点依次分配512个slot
+cluster slot init(node='db1', sdb1=0, edb1=511, node='db2', sdb2=512, edb2=1023);
+例2个节点，第1个分配每个节点依次分配10个slot，第2个分配1013个
+cluster slot init(node='db1', sdb1=0, edb1=9, node='db2', sdb2=10, edb2=1023);
+例4个节点，每个节点依次分配256个slot
+cluster slot init(node='db1', sdb1=0, edb1=255, node='db2', sdb2=256, edb2=511, node='db2', sdb2=512, edb2=767, node='db4', sdb4=768, edb4=1023);
+命令会对slot的连续性和有效性进行检测。
+```
+> （3）创建slot表默认访问用户并分配权限
+```sql
+--连接一个coordinator的postgres库，执行以下语句
+CREATE USER adbslotuser WITH PASSWORD 'asiainfonj';
+alter user adbslotuser nosuperuser;
+grant all on SCHEMA adb  to adbslotuser;
+grant select on table adb.adb_slot to adbslotuser;
+```
+到此，初始化hash slot信息配置过程完成。
+
+注：在使用过程中，需要注意每个数据库（除去postgres库）中都需要创建dblink extension
+```sql
+create database test;
+--连击到test库,创建dblink
+\c test
+create extension dblink;
+```
+
+**至此，ADB集群初始化全部完成！**
